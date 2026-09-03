@@ -29,9 +29,53 @@ if POSTGRES_URL:
     from psycopg.rows import dict_row
 
     class Database:
+        def __init__(self):
+            self._schema_ready = False
+
         def _connection(self):
             return psycopg.connect(POSTGRES_URL, row_factory=dict_row)
+
+        def _ensure_schema(self):
+            if self._schema_ready:
+                return
+
+            with self._connection() as conn, conn.cursor() as cur:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS users (
+                        telegram_id BIGINT PRIMARY KEY,
+                        username TEXT,
+                        first_name TEXT,
+                        joined_at TIMESTAMPTZ NOT NULL,
+                        last_seen TIMESTAMPTZ NOT NULL,
+                        articles_read INTEGER NOT NULL DEFAULT 0
+                    )
+                """)
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS requests (
+                        id BIGSERIAL PRIMARY KEY,
+                        telegram_id BIGINT,
+                        url TEXT,
+                        domain TEXT,
+                        title TEXT,
+                        success BOOLEAN NOT NULL,
+                        created_at TIMESTAMPTZ NOT NULL
+                    )
+                """)
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS errors (
+                        id BIGSERIAL PRIMARY KEY,
+                        telegram_id BIGINT,
+                        url TEXT,
+                        error TEXT,
+                        created_at TIMESTAMPTZ NOT NULL
+                    )
+                """)
+
+            self._schema_ready = True
+
         def _run(self, sql, values=(), fetch=False):
+            self._ensure_schema()
+
             with self._connection() as conn, conn.cursor() as cur:
                 cur.execute(sql, values)
                 return cur.fetchall() if fetch else None
