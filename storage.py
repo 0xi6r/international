@@ -3,15 +3,34 @@ import os
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 
-if not os.environ.get("DATABASE_URL"):
-    from database import db  # local SQLite compatibility
-else:
+DATABASE_ENV_KEYS = (
+    "DATABASE_URL",
+    "POSTGRES_URL",
+    "POSTGRES_PRISMA_URL",
+    "POSTGRES_URL_NON_POOLING",
+)
+
+
+def database_url():
+    for key in DATABASE_ENV_KEYS:
+        value = os.environ.get(key)
+
+        if value:
+            return value
+
+    return None
+
+
+POSTGRES_URL = database_url()
+
+
+if POSTGRES_URL:
     import psycopg
     from psycopg.rows import dict_row
 
     class Database:
         def _connection(self):
-            return psycopg.connect(os.environ["DATABASE_URL"], row_factory=dict_row)
+            return psycopg.connect(POSTGRES_URL, row_factory=dict_row)
         def _run(self, sql, values=(), fetch=False):
             with self._connection() as conn, conn.cursor() as cur:
                 cur.execute(sql, values)
@@ -35,3 +54,29 @@ else:
             rows = self._run("SELECT * FROM users WHERE telegram_id=%s", (telegram_id,), True)
             return rows[0] if rows else None
     db = Database()
+elif os.environ.get("VERCEL"):
+    class MissingDatabase:
+        def _raise(self, *args, **kwargs):
+            names = ", ".join(DATABASE_ENV_KEYS)
+            raise RuntimeError(
+                "No PostgreSQL connection string is configured. "
+                f"Set one of these Vercel environment variables: {names}."
+            )
+
+        register_user = _raise
+        increment_articles = _raise
+        log_request = _raise
+        log_error = _raise
+        total_users = _raise
+        total_articles = _raise
+        total_requests = _raise
+        successful_requests = _raise
+        failed_requests = _raise
+        today_requests = _raise
+        top_publishers = _raise
+        top_users = _raise
+        user_stats = _raise
+
+    db = MissingDatabase()
+else:
+    from database import db  # local SQLite compatibility
