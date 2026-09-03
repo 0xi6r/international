@@ -369,6 +369,53 @@ class Database:
 
         return cur.fetchone()
 
+    ############################################################
+
+    def user_requests(self, telegram_id):
+
+        cur = self.conn.execute(
+            """
+            SELECT COUNT(*)
+            FROM requests
+            WHERE telegram_id = ?
+            """,
+            (telegram_id,)
+        )
+
+        return cur.fetchone()[0]
+
+    ############################################################
+
+    def user_successful_requests(self, telegram_id):
+
+        cur = self.conn.execute(
+            """
+            SELECT COUNT(*)
+            FROM requests
+            WHERE telegram_id = ?
+            AND success = 1
+            """,
+            (telegram_id,)
+        )
+
+        return cur.fetchone()[0]
+
+    ############################################################
+
+    def user_failed_requests(self, telegram_id):
+
+        cur = self.conn.execute(
+            """
+            SELECT COUNT(*)
+            FROM requests
+            WHERE telegram_id = ?
+            AND success = 0
+            """,
+            (telegram_id,)
+        )
+
+        return cur.fetchone()[0]
+
 
 
 db = Database()

@@ -85,7 +85,7 @@ if POSTGRES_URL:
         def increment_articles(self, telegram_id): self._run("UPDATE users SET articles_read=articles_read+1 WHERE telegram_id=%s", (telegram_id,))
         def log_request(self, telegram_id, url, title, success): self._run("INSERT INTO requests (telegram_id,url,domain,title,success,created_at) VALUES (%s,%s,%s,%s,%s,%s)", (telegram_id,url,urlparse(url).netloc,title,bool(success),datetime.now(timezone.utc).isoformat()))
         def log_error(self, telegram_id, url, error): self._run("INSERT INTO errors (telegram_id,url,error,created_at) VALUES (%s,%s,%s,%s)", (telegram_id,url,str(error),datetime.now(timezone.utc).isoformat()))
-        def _one(self, sql): return self._run(sql, fetch=True)[0]["value"]
+        def _one(self, sql, values=()): return self._run(sql, values, fetch=True)[0]["value"]
         def total_users(self): return self._one("SELECT COUNT(*) AS value FROM users")
         def total_articles(self): return self._one("SELECT COALESCE(SUM(articles_read),0) AS value FROM users")
         def total_requests(self): return self._one("SELECT COUNT(*) AS value FROM requests")
@@ -97,6 +97,9 @@ if POSTGRES_URL:
         def user_stats(self, telegram_id):
             rows = self._run("SELECT * FROM users WHERE telegram_id=%s", (telegram_id,), True)
             return rows[0] if rows else None
+        def user_requests(self, telegram_id): return self._one("SELECT COUNT(*) AS value FROM requests WHERE telegram_id=%s", (telegram_id,))
+        def user_successful_requests(self, telegram_id): return self._one("SELECT COUNT(*) AS value FROM requests WHERE telegram_id=%s AND success=true", (telegram_id,))
+        def user_failed_requests(self, telegram_id): return self._one("SELECT COUNT(*) AS value FROM requests WHERE telegram_id=%s AND success=false", (telegram_id,))
     db = Database()
 elif os.environ.get("VERCEL"):
     class MissingDatabase:
@@ -120,6 +123,9 @@ elif os.environ.get("VERCEL"):
         top_publishers = _raise
         top_users = _raise
         user_stats = _raise
+        user_requests = _raise
+        user_successful_requests = _raise
+        user_failed_requests = _raise
 
     db = MissingDatabase()
 else:

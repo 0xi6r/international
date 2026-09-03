@@ -11,6 +11,7 @@ from telegram.ext import (
 from .config import BOT_TOKEN
 from .callbacks import button
 from .handlers import (
+    admin,
     handle_message,
     help_command,
     start,
@@ -44,6 +45,7 @@ def build_application():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("stats", stats))
+    app.add_handler(CommandHandler("admin", admin))
     app.add_handler(CallbackQueryHandler(button))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     return app

@@ -62,6 +62,40 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
+    db.register_user(update.effective_user)
+
+    user = db.user_stats(
+        update.effective_user.id
+    )
+
+    if user is None:
+
+        await update.message.reply_text(
+            "📊 <b>Your Usage</b>\n\n"
+            "No usage data is available yet.",
+            parse_mode=ParseMode.HTML,
+        )
+
+        return
+
+    text = (
+        "📊 <b>Your Usage</b>\n\n"
+        f"📖 Articles Read: <b>{user['articles_read']}</b>\n"
+        f"📨 Requests: <b>{db.user_requests(update.effective_user.id)}</b>\n"
+        f"✅ Successful: <b>{db.user_successful_requests(update.effective_user.id)}</b>\n"
+        f"❌ Failed: <b>{db.user_failed_requests(update.effective_user.id)}</b>\n\n"
+        f"🗓 Joined: <code>{user['joined_at']}</code>\n"
+        f"Last Seen: <code>{user['last_seen']}</code>"
+    )
+
+    await update.message.reply_text(
+        text,
+        parse_mode=ParseMode.HTML,
+    )
+
+
+async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
     if update.effective_user.id != ADMIN_ID:
 
         await update.message.reply_text(

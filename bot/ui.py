@@ -172,6 +172,8 @@ def help_text():
 
         "4. Enjoy a clean reading experience.\n\n"
 
+        "Use /stats to view your usage.\n\n"
+
         "<b>Supported Content</b>\n"
 
         "• Images\n"
