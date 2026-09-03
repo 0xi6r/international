@@ -30,6 +30,30 @@ from .ui import (
 logger = logging.getLogger(__name__)
 
 REPORT_URL = "https://t.me/articlereaderbotinfo?direct"
+BROADCAST_PREFIX = "📢 Bot Update\n\n"
+BROADCAST_LIMIT = 4096 - len(BROADCAST_PREFIX)
+
+
+def command_payload(text: str) -> str:
+
+    parts = text.split(
+        maxsplit=1,
+    )
+
+    if len(parts) < 2:
+        return ""
+
+    payload = parts[1].strip()
+
+    if (
+        len(payload) >= 2
+        and payload[0] == payload[-1]
+        and payload[0] in ("'", '"')
+    ):
+
+        payload = payload[1:-1].strip()
+
+    return payload
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -125,6 +149,8 @@ async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"🔥 Today: <b>{db.today_requests()}</b>\n"
         f"✅ Successful: <b>{db.successful_requests()}</b>\n"
         f"❌ Failed: <b>{db.failed_requests()}</b>\n\n"
+        '<b>Broadcast</b>\n'
+        '<code>/msg "message here"</code>\n\n'
         "<b>Top Publishers</b>\n"
         f"{publisher_text}"
     )
@@ -132,6 +158,79 @@ async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         text,
         parse_mode=ParseMode.HTML,
+    )
+
+
+async def broadcast_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    if update.effective_user.id != ADMIN_ID:
+
+        await update.message.reply_text(
+            "❌ NOT FOUND."
+        )
+
+        return
+
+    payload = command_payload(
+        update.message.text or ""
+    )
+
+    if not payload:
+
+        await update.message.reply_text(
+            'Usage: /msg "message here"'
+        )
+
+        return
+
+    if len(payload) > BROADCAST_LIMIT:
+
+        await update.message.reply_text(
+            f"❌ Message is too long. Limit: {BROADCAST_LIMIT} characters."
+        )
+
+        return
+
+    user_ids = db.all_user_ids()
+
+    if not user_ids:
+
+        await update.message.reply_text(
+            "No registered users found."
+        )
+
+        return
+
+    sent = 0
+    failed = 0
+    text = BROADCAST_PREFIX + payload
+
+    for telegram_id in user_ids:
+
+        try:
+
+            await context.bot.send_message(
+                chat_id=telegram_id,
+                text=text,
+                disable_web_page_preview=True,
+            )
+
+            sent += 1
+
+        except Exception as e:
+
+            failed += 1
+
+            logger.warning(
+                "Failed broadcasting to %s: %s",
+                telegram_id,
+                e,
+            )
+
+    await update.message.reply_text(
+        "Broadcast complete.\n\n"
+        f"Sent: {sent}\n"
+        f"Failed: {failed}"
     )
 
 

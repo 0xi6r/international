@@ -354,6 +354,23 @@ class Database:
 
     ############################################################
 
+    def all_user_ids(self):
+
+        cur = self.conn.execute(
+            """
+            SELECT telegram_id
+            FROM users
+            ORDER BY joined_at ASC
+            """
+        )
+
+        return [
+            row["telegram_id"]
+            for row in cur.fetchall()
+        ]
+
+    ############################################################
+
     def user_stats(self, telegram_id):
 
         cur = self.conn.execute(

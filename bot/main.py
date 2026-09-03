@@ -12,6 +12,7 @@ from .config import BOT_TOKEN
 from .callbacks import button
 from .handlers import (
     admin,
+    broadcast_message,
     handle_message,
     help_command,
     start,
@@ -46,6 +47,7 @@ def build_application():
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("stats", stats))
     app.add_handler(CommandHandler("admin", admin))
+    app.add_handler(CommandHandler("msg", broadcast_message))
     app.add_handler(CallbackQueryHandler(button))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     return app

@@ -94,6 +94,7 @@ if POSTGRES_URL:
         def today_requests(self): return self._one("SELECT COUNT(*) AS value FROM requests WHERE created_at::date=CURRENT_DATE")
         def top_publishers(self, limit=10): return self._run("SELECT domain,COUNT(*) AS total FROM requests GROUP BY domain ORDER BY total DESC LIMIT %s", (limit,), True)
         def top_users(self, limit=10): return self._run("SELECT first_name,username,articles_read FROM users ORDER BY articles_read DESC LIMIT %s", (limit,), True)
+        def all_user_ids(self): return [row["telegram_id"] for row in self._run("SELECT telegram_id FROM users ORDER BY joined_at ASC", fetch=True)]
         def user_stats(self, telegram_id):
             rows = self._run("SELECT * FROM users WHERE telegram_id=%s", (telegram_id,), True)
             return rows[0] if rows else None
@@ -122,6 +123,7 @@ elif os.environ.get("VERCEL"):
         today_requests = _raise
         top_publishers = _raise
         top_users = _raise
+        all_user_ids = _raise
         user_stats = _raise
         user_requests = _raise
         user_successful_requests = _raise
