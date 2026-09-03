@@ -91,6 +91,32 @@ class Database:
         )
         """)
 
+        ########################################################
+        # Broadcasts
+        ########################################################
+
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS broadcasts (
+
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+            admin_id INTEGER,
+
+            message TEXT NOT NULL,
+
+            status TEXT NOT NULL DEFAULT 'pending',
+
+            created_at TEXT NOT NULL,
+
+            sent_at TEXT,
+
+            sent_count INTEGER NOT NULL DEFAULT 0,
+
+            failed_count INTEGER NOT NULL DEFAULT 0
+
+        )
+        """)
+
         self.conn.commit()
 
     ############################################################
@@ -222,6 +248,131 @@ class Database:
                 url,
                 str(error),
                 datetime.utcnow().isoformat()
+            )
+        )
+
+        self.conn.commit()
+
+    ############################################################
+
+    def recent_errors(self, limit=10):
+
+        cur = self.conn.execute(
+            """
+            SELECT *
+            FROM errors
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (limit,)
+        )
+
+        return cur.fetchall()
+
+    ############################################################
+
+    def create_broadcast(self, admin_id, message):
+
+        cur = self.conn.execute(
+            """
+            INSERT INTO broadcasts
+            (
+                admin_id,
+                message,
+                status,
+                created_at
+            )
+            VALUES (?, ?, 'pending', ?)
+            """,
+            (
+                admin_id,
+                message,
+                datetime.utcnow().isoformat(),
+            )
+        )
+
+        self.conn.commit()
+
+        return cur.lastrowid
+
+    ############################################################
+
+    def get_broadcast(self, broadcast_id):
+
+        cur = self.conn.execute(
+            """
+            SELECT *
+            FROM broadcasts
+            WHERE id = ?
+            """,
+            (broadcast_id,)
+        )
+
+        return cur.fetchone()
+
+    ############################################################
+
+    def claim_broadcast(self, broadcast_id):
+
+        cur = self.conn.execute(
+            """
+            UPDATE broadcasts
+            SET status = 'sending'
+            WHERE id = ?
+            AND status = 'pending'
+            """,
+            (broadcast_id,)
+        )
+
+        self.conn.commit()
+
+        if cur.rowcount != 1:
+            return None
+
+        return self.get_broadcast(broadcast_id)
+
+    ############################################################
+
+    def cancel_broadcast(self, broadcast_id):
+
+        cur = self.conn.execute(
+            """
+            UPDATE broadcasts
+            SET status = 'cancelled'
+            WHERE id = ?
+            AND status = 'pending'
+            """,
+            (broadcast_id,)
+        )
+
+        self.conn.commit()
+
+        return cur.rowcount == 1
+
+    ############################################################
+
+    def complete_broadcast(
+        self,
+        broadcast_id,
+        sent,
+        failed,
+    ):
+
+        self.conn.execute(
+            """
+            UPDATE broadcasts
+            SET
+                status = 'sent',
+                sent_at = ?,
+                sent_count = ?,
+                failed_count = ?
+            WHERE id = ?
+            """,
+            (
+                datetime.utcnow().isoformat(),
+                sent,
+                failed,
+                broadcast_id,
             )
         )
 

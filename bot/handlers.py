@@ -1,6 +1,10 @@
 import logging
 
-from telegram import Update
+from telegram import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    Update,
+)
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
@@ -11,6 +15,11 @@ from .config import (
     ADMIN_ID,
     MAX_MESSAGE_LENGTH,
     URL_REGEX,
+)
+
+from .broadcast import (
+    BROADCAST_LIMIT,
+    BROADCAST_PREFIX,
 )
 
 from .supported import (
@@ -30,8 +39,6 @@ from .ui import (
 logger = logging.getLogger(__name__)
 
 REPORT_URL = "https://t.me/articlereaderbotinfo?direct"
-BROADCAST_PREFIX = "📢 Bot Update\n\n"
-BROADCAST_LIMIT = 4096 - len(BROADCAST_PREFIX)
 
 
 def command_payload(text: str) -> str:
@@ -151,6 +158,8 @@ async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"❌ Failed: <b>{db.failed_requests()}</b>\n\n"
         '<b>Broadcast</b>\n'
         '<code>/msg "message here"</code>\n\n'
+        "<b>Diagnostics</b>\n"
+        "<code>/errors</code>\n\n"
         "<b>Top Publishers</b>\n"
         f"{publisher_text}"
     )
@@ -201,37 +210,130 @@ async def broadcast_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         return
 
-    sent = 0
-    failed = 0
-    text = BROADCAST_PREFIX + payload
-
-    for telegram_id in user_ids:
-
-        try:
-
-            await context.bot.send_message(
-                chat_id=telegram_id,
-                text=text,
-                disable_web_page_preview=True,
-            )
-
-            sent += 1
-
-        except Exception as e:
-
-            failed += 1
-
-            logger.warning(
-                "Failed broadcasting to %s: %s",
-                telegram_id,
-                e,
-            )
+    broadcast_id = db.create_broadcast(
+        admin_id=update.effective_user.id,
+        message=payload,
+    )
 
     await update.message.reply_text(
-        "Broadcast complete.\n\n"
-        f"Sent: {sent}\n"
-        f"Failed: {failed}"
+        "Preview broadcast:\n\n"
+        f"{BROADCAST_PREFIX}{payload}\n\n"
+        f"Recipients: {len(user_ids)}",
+        reply_markup=InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton(
+                    "Send",
+                    callback_data=f"broadcast:send:{broadcast_id}",
+                ),
+                InlineKeyboardButton(
+                    "Cancel",
+                    callback_data=f"broadcast:cancel:{broadcast_id}",
+                ),
+            ],
+        ]),
+        disable_web_page_preview=True,
     )
+
+
+async def recent_errors(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    if update.effective_user.id != ADMIN_ID:
+
+        await update.message.reply_text(
+            "❌ NOT FOUND."
+        )
+
+        return
+
+    errors = db.recent_errors()
+
+    if not errors:
+
+        await update.message.reply_text(
+            "No recent errors found."
+        )
+
+        return
+
+    lines = [
+        "Recent Errors",
+        "",
+    ]
+
+    for row in errors:
+
+        error = str(row["error"])
+
+        if len(error) > 180:
+            error = error[:177] + "..."
+
+        lines.extend([
+            f"Time: {row['created_at']}",
+            f"User: {row['telegram_id']}",
+            f"URL: {row['url'] or 'n/a'}",
+            f"Error: {error}",
+            "",
+        ])
+
+    await update.message.reply_text(
+        "\n".join(lines).strip(),
+        disable_web_page_preview=True,
+    )
+
+
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
+
+    logger.exception(
+        "Unhandled Telegram update error",
+        exc_info=context.error,
+    )
+
+    effective_message = getattr(
+        update,
+        "effective_message",
+        None,
+    )
+
+    effective_user = getattr(
+        update,
+        "effective_user",
+        None,
+    )
+
+    telegram_id = getattr(
+        effective_user,
+        "id",
+        None,
+    )
+
+    try:
+
+        db.log_error(
+            telegram_id=telegram_id,
+            url="",
+            error=context.error,
+        )
+
+    except Exception:
+
+        logger.exception(
+            "Failed logging unhandled error"
+        )
+
+    if effective_message is None:
+        return
+
+    try:
+
+        await effective_message.reply_text(
+            "❌ Something went wrong. Please try again."
+        )
+
+    except Exception:
+
+        logger.exception(
+            "Failed sending error response"
+        )
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -506,6 +608,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             url=url,
             title="",
             success=False,
+        )
+
+        db.log_error(
+            telegram_id=update.effective_user.id,
+            url=url,
+            error=e,
         )
 
         try:

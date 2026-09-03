@@ -13,8 +13,10 @@ from .callbacks import button
 from .handlers import (
     admin,
     broadcast_message,
+    error_handler,
     handle_message,
     help_command,
+    recent_errors,
     start,
     stats,
 )
@@ -48,8 +50,10 @@ def build_application():
     app.add_handler(CommandHandler("stats", stats))
     app.add_handler(CommandHandler("admin", admin))
     app.add_handler(CommandHandler("msg", broadcast_message))
+    app.add_handler(CommandHandler("errors", recent_errors))
     app.add_handler(CallbackQueryHandler(button))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    app.add_error_handler(error_handler)
     return app
 
 ############################################################

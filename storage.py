@@ -70,6 +70,18 @@ if POSTGRES_URL:
                         created_at TIMESTAMPTZ NOT NULL
                     )
                 """)
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS broadcasts (
+                        id BIGSERIAL PRIMARY KEY,
+                        admin_id BIGINT,
+                        message TEXT NOT NULL,
+                        status TEXT NOT NULL DEFAULT 'pending',
+                        created_at TIMESTAMPTZ NOT NULL,
+                        sent_at TIMESTAMPTZ,
+                        sent_count INTEGER NOT NULL DEFAULT 0,
+                        failed_count INTEGER NOT NULL DEFAULT 0
+                    )
+                """)
 
             self._schema_ready = True
 
@@ -85,6 +97,20 @@ if POSTGRES_URL:
         def increment_articles(self, telegram_id): self._run("UPDATE users SET articles_read=articles_read+1 WHERE telegram_id=%s", (telegram_id,))
         def log_request(self, telegram_id, url, title, success): self._run("INSERT INTO requests (telegram_id,url,domain,title,success,created_at) VALUES (%s,%s,%s,%s,%s,%s)", (telegram_id,url,urlparse(url).netloc,title,bool(success),datetime.now(timezone.utc).isoformat()))
         def log_error(self, telegram_id, url, error): self._run("INSERT INTO errors (telegram_id,url,error,created_at) VALUES (%s,%s,%s,%s)", (telegram_id,url,str(error),datetime.now(timezone.utc).isoformat()))
+        def recent_errors(self, limit=10): return self._run("SELECT * FROM errors ORDER BY created_at DESC LIMIT %s", (limit,), True)
+        def create_broadcast(self, admin_id, message):
+            rows = self._run("INSERT INTO broadcasts (admin_id,message,status,created_at) VALUES (%s,%s,'pending',%s) RETURNING id", (admin_id,message,datetime.now(timezone.utc).isoformat()), True)
+            return rows[0]["id"]
+        def get_broadcast(self, broadcast_id):
+            rows = self._run("SELECT * FROM broadcasts WHERE id=%s", (broadcast_id,), True)
+            return rows[0] if rows else None
+        def claim_broadcast(self, broadcast_id):
+            rows = self._run("UPDATE broadcasts SET status='sending' WHERE id=%s AND status='pending' RETURNING *", (broadcast_id,), True)
+            return rows[0] if rows else None
+        def cancel_broadcast(self, broadcast_id):
+            rows = self._run("UPDATE broadcasts SET status='cancelled' WHERE id=%s AND status='pending' RETURNING id", (broadcast_id,), True)
+            return bool(rows)
+        def complete_broadcast(self, broadcast_id, sent, failed): self._run("UPDATE broadcasts SET status='sent', sent_at=%s, sent_count=%s, failed_count=%s WHERE id=%s", (datetime.now(timezone.utc).isoformat(),sent,failed,broadcast_id))
         def _one(self, sql, values=()): return self._run(sql, values, fetch=True)[0]["value"]
         def total_users(self): return self._one("SELECT COUNT(*) AS value FROM users")
         def total_articles(self): return self._one("SELECT COALESCE(SUM(articles_read),0) AS value FROM users")
@@ -115,6 +141,12 @@ elif os.environ.get("VERCEL"):
         increment_articles = _raise
         log_request = _raise
         log_error = _raise
+        recent_errors = _raise
+        create_broadcast = _raise
+        get_broadcast = _raise
+        claim_broadcast = _raise
+        cancel_broadcast = _raise
+        complete_broadcast = _raise
         total_users = _raise
         total_articles = _raise
         total_requests = _raise
